@@ -1,0 +1,42 @@
+name: duo_motion
+description: >-
+  iPhone Duo style tilt-driven frosted-glass fold effect for any Flutter widget
+  subtree. Device motion drives a fragment shader on Impeller.
+version: 1.0.0
+homepage: https://github.com/bhx20/duo_motion
+repository: https://github.com/bhx20/duo_motion
+issue_tracker: https://github.com/bhx20/duo_motion/issues
+
+
+topics:
+  - animation
+  - shader
+  - sensors
+  - impeller
+  - duo
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.duomotion.duo_motion
+        pluginClass: DuoAnimationPlugin
+      ios:
+        pluginClass: DuoAnimationPlugin
+  shaders:
+    - glsl/duo_motion_base.frag
+    - glsl/duo_motion_single.frag
+    - glsl/duo_motion_book.frag
+    - glsl/duo_motion_accordion.frag
