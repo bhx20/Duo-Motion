@@ -3,8 +3,8 @@ description: A minimal example that folds a card, from a slider or from the devi
 publish_to: none
 
 environment:
-  sdk: ^3.12.0
-  flutter: ">=3.44.0"
+  sdk: '>=3.6.0 <4.0.0'
+  flutter: ">=3.27.0"
 
 dependencies:
   duo_motion:

@@ -10,7 +10,7 @@
 
 [![Pub Version](https://img.shields.io/pub/v/duo_motion?color=007AFF&style=flat-square)](https://pub.dev/packages/duo_motion)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.44.0-02569B?logo=flutter&style=flat-square)](https://flutter.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.27.0-02569B?logo=flutter&style=flat-square)](https://flutter.dev)
 [![Tests](https://img.shields.io/badge/Tests-275%20Passing-success?style=flat-square)](test/)
 [![Impeller](https://img.shields.io/badge/GPU-Impeller%20Fragment%20Shaders-black?style=flat-square)](glsl/)
 
