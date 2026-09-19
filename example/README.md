@@ -1,7 +1,7 @@
 # DuoMotion Showcase Example
 
 <p align="center">
-  <img src="../assets/showcase.webp" alt="DuoMotion Showcase Demo" width="340" />
+  <img src="https://raw.githubusercontent.com/bhx20/duo_motion/main/assets/showcase.webp" alt="DuoMotion Showcase Demo" width="340" />
 </p>
 
 This example demonstrates the **iPhone Duo / SoloTilt** frosted-glass 3D perspective fold effect using `duo_motion`.
