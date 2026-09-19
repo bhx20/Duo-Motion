@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.1] - 2026-09-19
 
+### Changed
+- Broadened SDK constraints to `sdk: '>=3.6.0 <4.0.0'` and `flutter: '>=3.27.0'` for maximum developer compatibility.
+- Declared `assets/` in `pubspec.yaml`.
+
 ### Fixed
-- Fixed showcase demo image URL in `README.md` to use raw GitHub CDN for pub.dev rendering.
+- Fixed showcase demo image URL in `README.md` and `example/README.md` to use direct raw GitHub CDN for reliable rendering on pub.dev.
+- Formatted Apache 2.0 license notice with copyright author attribution.
 
 ## [1.0.0] - 2026-09-12
 
