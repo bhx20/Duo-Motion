@@ -35,6 +35,8 @@ flutter:
         pluginClass: DuoAnimationPlugin
       ios:
         pluginClass: DuoAnimationPlugin
+  assets:
+    - assets/
   shaders:
     - glsl/duo_motion_base.frag
     - glsl/duo_motion_single.frag

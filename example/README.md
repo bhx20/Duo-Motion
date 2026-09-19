@@ -1,17 +1,25 @@
-# duo_motion_example
+# DuoMotion Showcase Example
 
-A new Flutter project.
+<p align="center">
+  <img src="../assets/showcase.webp" alt="DuoMotion Showcase Demo" width="340" />
+</p>
 
-## Getting Started
+This example demonstrates the **iPhone Duo / SoloTilt** frosted-glass 3D perspective fold effect using `duo_motion`.
 
-This project is a starting point for a Flutter application.
+## Features Demonstrated
 
-A few resources to get you started if this is your first Flutter project:
+- **Real-Time Gyroscope Tilt**: Live device attitude tracking using hardware sensors (`FoldController.useSensor = true`).
+- **3D Pinhole Ray-Traced Optics**: Observer perspective foreshortening with progressive depth-of-field blur on Impeller shaders.
+- **Glassmorphic Interactive UI**: Frosted glass cards, live dynamic equalizer, rotating vinyl disc, and authentic iOS dock.
+- **Bi-Directional Gesture Control**: Touch dragging with snappy second-order physics return.
+- **Multi-Theme Support**: Obsidian Midnight Dark, Pure White, Ocean Blue, Neon Purple, and Emerald Mint.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Running the Example
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Make sure you have Flutter installed and a device or emulator running:
+
+```bash
+cd example
+flutter pub get
+flutter run
+```

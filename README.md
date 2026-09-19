@@ -16,6 +16,12 @@
 
 <br/>
 
+<p align="center">
+  <img src="assets/showcase.webp" alt="DuoMotion Showcase Demo" width="360" />
+</p>
+
+<br/>
+
 [The iPhone Duo Illusion](#the-iphone-duo-motion-effect) •
 [Key Capabilities](#key-capabilities) •
 [Installation](#installation) •
