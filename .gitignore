@@ -31,14 +31,12 @@ doc/api/
 pubspec.lock
 
 # Environment variables
-.env*
 
 # Flutter Version Manager
 .fvm/
 
 # IDE & Editor files
 .idea/
-.vscode/
 *.iml
 *.ipr
 *.iws
@@ -71,3 +69,5 @@ example/build/
 example/.dart_tool/
 example/.flutter-plugins*
 example/pubspec.lock
+config.bat
+node_modules

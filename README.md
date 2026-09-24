@@ -15,13 +15,7 @@ _Faithfully reproducing the viral iPhone Duo frosted-glass perspective illusion.
 [![Impeller](https://img.shields.io/badge/GPU-Impeller%20Vulkan-black?style=flat-square)](glsl/)
 [![Performance](https://img.shields.io/badge/Hardware%20Performance-90.0%20FPS%20%7C%205.4ms%20GPU-00C853?style=flat-square)](#hardware-performance--benchmark-showcase)
 
-<br/>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/bhx20/duo_motion/main/assets/showcase.webp" alt="DuoMotion Showcase Demo" width="360" />
-</p>
-
-<br/>
 
 [The iPhone Duo Illusion](#the-iphone-duo-motion-effect) •
 [Performance Benchmark](#hardware-performance--benchmark-showcase) •
@@ -137,7 +131,7 @@ Add `duo_motion` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  duo_motion: ^1.0.0
+  duo_motion: ^1.0.2
 ```
 
 Or install directly via CLI:
