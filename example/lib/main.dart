@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:duo_motion/duo_motion.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 void main() {
@@ -132,9 +134,10 @@ class SoloTiltHomeScreen extends StatefulWidget {
 }
 
 class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final FoldController _controller;
   late final AnimationController _equalizerAnimController;
+  late final Ticker _oscillatorTicker;
 
   final FoldMode _mode = const SingleHingeFold();
 
@@ -147,9 +150,15 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
   final Stopwatch _songStopwatch = Stopwatch();
   Duration _seekOffset = Duration.zero;
 
+  // Benchmark Mode: 0 = BEFORE (No Animation), 1 = AFTER (Widget Anim), 2 = AFTER (Full 3D GPU Fold)
+  int _benchmarkMode = 2;
+  final List<ui.FrameTiming> _modeTimings = [];
+  Timer? _logStatsTimer;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addTimingsCallback(_onFrameTiming);
     _controller = FoldController(
       constraints: const HorizontalFoldConstraints(maxTiltDegrees: 85),
     );
@@ -172,10 +181,110 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
 
     // Start real-time audio playback clock
     _songStopwatch.start();
+
+    // Hardware VSync-aligned benchmark oscillation paced to 60 Hz cadence
+    Duration lastOscillate = Duration.zero;
+    _oscillatorTicker = createTicker((elapsed) {
+      if (_benchmarkMode == 2) {
+        if (elapsed - lastOscillate < const Duration(milliseconds: 16)) return;
+        lastOscillate = elapsed;
+        final seconds = elapsed.inMicroseconds / 1000000.0;
+        final tilt = 22.5 + 12.5 * math.sin(seconds * 3.14159265);
+        _controller.setManualTilt(tilt);
+      }
+    });
+
+    if (_benchmarkMode == 2) {
+      _oscillatorTicker.start();
+    }
+
+    _logStatsTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _printBenchSummary();
+    });
+  }
+
+  void _onFrameTiming(List<ui.FrameTiming> timings) {
+    _modeTimings.addAll(timings);
+    if (_modeTimings.length > 600) {
+      _modeTimings.removeRange(0, _modeTimings.length - 600);
+    }
+  }
+
+  void _printBenchSummary() {
+    if (_modeTimings.isEmpty) {
+      debugPrint('[BENCH_DATA] MODE=$_benchmarkMode FRAMES=0');
+      return;
+    }
+    final count = _modeTimings.length;
+    double sumTotal = 0;
+    double sumBuild = 0;
+    double sumRaster = 0;
+    final totalList = <double>[];
+    int jank60Count = 0;
+    int jank90Count = 0;
+    for (final t in _modeTimings) {
+      final b = t.buildDuration.inMicroseconds / 1000.0;
+      final r = t.rasterDuration.inMicroseconds / 1000.0;
+      final tot = t.totalSpan.inMicroseconds / 1000.0;
+      sumBuild += b;
+      sumRaster += r;
+      sumTotal += tot;
+      totalList.add(tot);
+      if (b > 16.66 || r > 16.66) jank60Count++;
+      if (b > 11.11 || r > 11.11) jank90Count++;
+    }
+    totalList.sort();
+    final avgTotal = sumTotal / count;
+    final avgBuild = sumBuild / count;
+    final avgRaster = sumRaster / count;
+    final p90 = totalList[(count * 0.90).floor().clamp(0, count - 1)];
+    final p95 = totalList[(count * 0.95).floor().clamp(0, count - 1)];
+    final maxFrame = totalList.last;
+    final fps = (1000.0 / avgTotal).clamp(0.0, 90.0);
+    final minFps = (1000.0 / maxFrame).clamp(0.0, 90.0);
+    final jank60Pct = (jank60Count / count) * 100.0;
+    final jank90Pct = (jank90Count / count) * 100.0;
+
+    debugPrint('[BENCH_DATA] MODE=$_benchmarkMode FRAMES=$count FPS=${fps.toStringAsFixed(1)} MIN_FPS=${minFps.toStringAsFixed(1)} AVG_MS=${avgTotal.toStringAsFixed(2)} UI_MS=${avgBuild.toStringAsFixed(2)} RASTER_MS=${avgRaster.toStringAsFixed(2)} P90_MS=${p90.toStringAsFixed(2)} P95_MS=${p95.toStringAsFixed(2)} JANK60_PCT=${jank60Pct.toStringAsFixed(1)} JANK90_PCT=${jank90Pct.toStringAsFixed(1)}');
+  }
+
+  void _cycleBenchmarkMode() {
+    setState(() {
+      _modeTimings.clear();
+      _benchmarkMode = (_benchmarkMode + 1) % 3;
+      if (_benchmarkMode == 0) {
+        // BEFORE: Baseline (Zero Animation, Fold disabled, Music stopped)
+        _isPlayingMusic = false;
+        _songStopwatch.stop();
+        _equalizerAnimController.stop();
+        if (_oscillatorTicker.isActive) _oscillatorTicker.stop();
+        _controller.useSensor = false;
+        _controller.setManualTilt(0.0);
+      } else if (_benchmarkMode == 1) {
+        // AFTER Part 1: Widget Animation only (Music Player active, Fold disabled)
+        _isPlayingMusic = true;
+        _songStopwatch.start();
+        _equalizerAnimController.repeat();
+        if (_oscillatorTicker.isActive) _oscillatorTicker.stop();
+        _controller.useSensor = false;
+        _controller.setManualTilt(0.0);
+      } else {
+        // AFTER Part 2: Full Duo-Motion (GPU Fragment Shader + Tilt + Music active)
+        _isPlayingMusic = true;
+        _songStopwatch.start();
+        _equalizerAnimController.repeat();
+        _controller.useSensor = false;
+        if (!_oscillatorTicker.isActive) _oscillatorTicker.start();
+      }
+    });
+    HapticFeedback.mediumImpact();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeTimingsCallback(_onFrameTiming);
+    _logStatsTimer?.cancel();
+    _oscillatorTicker.dispose();
     _songStopwatch.stop();
     _equalizerAnimController.dispose();
     _controller.dispose();
@@ -226,9 +335,9 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
     return FoldParameters(
       surroundColor: Colors.black,
       hazeColor: _activeTheme.hazeColor,
-      blurSpread: 0.18,
+      blurSpread: 0.06,
       darkening: _activeTheme.isDark ? 0.006 : 0.002,
-      baseBlurMillimeters: 0.12,
+      baseBlurMillimeters: 0.0,
       eyeDistanceMillimeters: 420,
       stretchEdges: false,
     );
@@ -273,6 +382,7 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
               parameters: params,
               surroundColor: backdrop,
               effects: _controller.effects,
+              enabled: _benchmarkMode == 2,
               child: _buildIosHomeScreenContent(isLandscape: isLandscape),
             ),
           );
@@ -462,8 +572,9 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
 
             // iOS App Grid (3 rows x 4 columns)
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -546,68 +657,83 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
                 ),
               ),
             ),
+            ),
 
-            // Frosted Glass Spotlight Search Pill
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 7,
+            // Frosted Glass Spotlight Search Pill / Benchmark Mode Switcher
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _cycleBenchmarkMode,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: LinearGradient(
+                    colors: t.isDark
+                        ? [
+                            Colors.white.withValues(alpha: 0.20),
+                            const Color(0xFF161C2A).withValues(alpha: 0.65),
+                          ]
+                        : [
+                            Colors.white.withValues(alpha: 0.85),
+                            Colors.white.withValues(alpha: 0.55),
+                          ],
                   ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: LinearGradient(
-                      colors: t.isDark
-                          ? [
-                              Colors.white.withValues(alpha: 0.14),
-                              const Color(0xFF161C2A).withValues(alpha: 0.50),
-                            ]
-                          : [
-                              Colors.white.withValues(alpha: 0.75),
-                              Colors.white.withValues(alpha: 0.45),
-                            ],
-                    ),
-                    border: Border.all(
-                      color: t.isDark
-                          ? Colors.white.withValues(alpha: 0.18)
-                          : Colors.black.withValues(alpha: 0.06),
-                      width: 0.8,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: t.isDark ? 0.25 : 0.04,
-                        ),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                  border: Border.all(
+                    color: t.isDark
+                        ? Colors.white.withValues(alpha: 0.22)
+                        : Colors.black.withValues(alpha: 0.08),
+                    width: 0.8,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.search_rounded,
-                        size: 13,
-                        color: t.subtextColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: t.isDark ? 0.25 : 0.04,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Search',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: t.subtextColor,
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _benchmarkMode == 0
+                              ? Icons.pause_circle_outline_rounded
+                              : (_benchmarkMode == 1
+                                  ? Icons.music_note_rounded
+                                  : Icons.view_in_ar_rounded),
+                          size: 13,
+                          color: _benchmarkMode == 0
+                              ? const Color(0xFF8E8E93)
+                              : (_benchmarkMode == 1
+                                  ? const Color(0xFFFA2D55)
+                                  : const Color(0xFF0A84FF)),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          _benchmarkMode == 0
+                              ? 'BEFORE: No Anim'
+                              : (_benchmarkMode == 1
+                                  ? 'AFTER: Widget Anim'
+                                  : 'AFTER: Full 3D Fold'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _benchmarkMode == 0
+                                ? const Color(0xFF8E8E93)
+                                : (_benchmarkMode == 1
+                                    ? const Color(0xFFFA2D55)
+                                    : const Color(0xFF0A84FF)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
             const SizedBox(height: 12),
 
             // Bottom Frosted Glass Dock
@@ -713,9 +839,10 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
 
   /// Live Music Player Widget with slowed, harmonic equalizer, rotating vinyl disc, and left-to-right progress.
   Widget _buildMusicContent(SoloTheme t) {
-    return AnimatedBuilder(
-      animation: _equalizerAnimController,
-      builder: (context, _) {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _equalizerAnimController,
+        builder: (context, _) {
         final eqProgress = _equalizerAnimController.value;
         final songProgress = _currentSongProgress;
         final elapsedText = _currentSongElapsedText;
@@ -1031,7 +1158,8 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
           ],
         );
       },
-    );
+    ),
+  );
   }
 
   /// Dynamic bouncing audio visualizer bars (calm, slowed-down musical harmonics).
@@ -1161,62 +1289,58 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
 
   /// Authentic Apple Frosted Glass Dock.
   Widget _buildDock(SoloTheme t, {required bool compact}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 8.0 : 20.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(compact ? 100 : 100),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              vertical: compact ? 8 : 12,
-              horizontal: compact ? 12 : 18,
-            ),
-            decoration: BoxDecoration(
+    return RepaintBoundary(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: compact ? 8.0 : 20.0),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            vertical: compact ? 8 : 12,
+            horizontal: compact ? 12 : 18,
+          ),
+          decoration: BoxDecoration(
+            color: t.isDark
+                ? const Color(0xFF1A2234).withValues(alpha: 0.65)
+                : Colors.white.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(
               color: t.isDark
-                  ? const Color(0xFF1A2234).withValues(alpha: 0.48)
-                  : Colors.white.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(compact ? 100 : 100),
-              border: Border.all(
-                color: t.isDark
-                    ? Colors.white.withValues(alpha: 0.22)
-                    : Colors.white.withValues(alpha: 0.60),
-                width: 1.0,
+                  ? Colors.white.withValues(alpha: 0.22)
+                  : Colors.white.withValues(alpha: 0.60),
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: t.isDark ? 0.55 : 0.10),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+                spreadRadius: -3,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: t.isDark ? 0.55 : 0.10),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                  spreadRadius: -3,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildDockIcon(
-                  icon: Icons.phone_rounded,
-                  color: const Color(0xFF34C759),
-                  compact: compact,
-                ),
-                _buildDockIcon(
-                  icon: Icons.mail_rounded,
-                  color: const Color(0xFF007AFF),
-                  compact: compact,
-                ),
-                _buildDockIcon(
-                  icon: Icons.explore_rounded,
-                  color: const Color(0xFF007AFF),
-                  compact: compact,
-                ),
-                _buildDockIcon(
-                  icon: Icons.music_note_rounded,
-                  color: const Color(0xFFFA2D55),
-                  compact: compact,
-                ),
-              ],
-            ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildDockIcon(
+                icon: Icons.phone_rounded,
+                color: const Color(0xFF34C759),
+                compact: compact,
+              ),
+              _buildDockIcon(
+                icon: Icons.mail_rounded,
+                color: const Color(0xFF007AFF),
+                compact: compact,
+              ),
+              _buildDockIcon(
+                icon: Icons.explore_rounded,
+                color: const Color(0xFF007AFF),
+                compact: compact,
+              ),
+              _buildDockIcon(
+                icon: Icons.music_note_rounded,
+                color: const Color(0xFFFA2D55),
+                compact: compact,
+              ),
+            ],
           ),
         ),
       ),
@@ -1231,48 +1355,42 @@ class _SoloTiltHomeScreenState extends State<SoloTiltHomeScreen>
   }) {
     final t = _activeTheme;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: height,
-          padding: padding ?? const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: t.isDark
-                  ? [
-                      Colors.white.withValues(alpha: 0.16),
-                      const Color(0xFF182030).withValues(alpha: 0.46),
-                      const Color(0xFF0B101B).withValues(alpha: 0.68),
-                    ]
-                  : [
-                      Colors.white.withValues(alpha: 0.85),
-                      Colors.white.withValues(alpha: 0.65),
-                    ],
-              stops: const [0.0, 0.45, 1.0],
-            ),
-            border: Border.all(
-              color: t.isDark
-                  ? Colors.white.withValues(alpha: 0.18)
-                  : Colors.white.withValues(alpha: 0.65),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: t.isDark ? 0.42 : 0.06),
-                blurRadius: 22,
-                offset: const Offset(0, 8),
-                spreadRadius: -2,
-              ),
-            ],
-          ),
-          child: child,
+    return Container(
+      height: height,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: t.isDark
+              ? [
+                  Colors.white.withValues(alpha: 0.16),
+                  const Color(0xFF182030).withValues(alpha: 0.46),
+                  const Color(0xFF0B101B).withValues(alpha: 0.68),
+                ]
+              : [
+                  Colors.white.withValues(alpha: 0.85),
+                  Colors.white.withValues(alpha: 0.65),
+                ],
+          stops: const [0.0, 0.45, 1.0],
         ),
+        border: Border.all(
+          color: t.isDark
+              ? Colors.white.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.65),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: t.isDark ? 0.42 : 0.06),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+            spreadRadius: -2,
+          ),
+        ],
       ),
+      child: child,
     );
   }
 

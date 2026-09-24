@@ -179,7 +179,10 @@ class _DuoFoldState extends State<DuoFold> {
     }
 
     return ClipRect(
-      child: ImageFiltered(imageFilter: filter, child: widget.child),
+      child: ImageFiltered(
+        imageFilter: filter,
+        child: RepaintBoundary(child: widget.child),
+      ),
     );
   }
 }
